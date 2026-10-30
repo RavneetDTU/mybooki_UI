@@ -1,0 +1,288 @@
+import { handleApiError } from '../utils/errorHandler';
+import apiClient from './api/axios';
+import { ADDRESS_ENDPOINTS, AUTH_ENDPOINTS, JARVIS_CONFIG_ENDPOINTS } from './api/endpoints';
+
+/**
+ * Settings Service
+ * Handles address (GET/PUT) and password change.
+ * All address calls are scoped to the logged-in restaurantId.
+ */
+
+export const settingsService = {
+    /**
+     * Get restaurant address.
+     * GET /restaurants/:restaurantId/address
+     */
+    getAddress: async (restaurantId) => {
+        try {
+            console.log('[Settings] Fetching address for restaurantId:', restaurantId);
+            const response = await apiClient.get(ADDRESS_ENDPOINTS.GET(restaurantId));
+            const data = response.data;
+            console.log('[Settings] Address response:', data);
+
+            return {
+                streetLine1: data.street_address || '',
+                city: data.city || '',
+                province: data.province_state || '',
+                postalCode: data.postal_code || '',
+            };
+        } catch (error) {
+            const message = handleApiError(error, 'Failed to fetch address');
+            throw new Error(message);
+        }
+    },
+
+    /**
+     * Update restaurant address.
+     * PUT /restaurants/:restaurantId/address
+     * Body: { street_address, city, province_state, postal_code }
+     */
+    updateAddress: async (restaurantId, addressData) => {
+        try {
+            const payload = {
+                street_address: addressData.streetLine1,
+                city: addressData.city,
+                province_state: addressData.province,
+                postal_code: addressData.postalCode,
+            };
+            console.log('[Settings] Updating address:', payload);
+            const response = await apiClient.put(ADDRESS_ENDPOINTS.UPDATE(restaurantId), payload);
+            console.log('[Settings] Address update response:', response.data);
+            return response.data;
+        } catch (error) {
+            const message = handleApiError(error, 'Failed to update address');
+            throw new Error(message);
+        }
+    },
+
+    /**
+     * Change password.
+     */
+    changePassword: async (currentPassword, newPassword) => {
+        try {
+            const payload = {
+                current_password: currentPassword,
+                new_password: newPassword,
+            };
+            const response = await apiClient.patch(AUTH_ENDPOINTS.UPDATE_PASSWORD, payload);
+            return response.data;
+        } catch (error) {
+            const message = handleApiError(error, 'Failed to change password');
+            throw new Error(message);
+        }
+    },
+
+    /**
+     * Get deposit amount from Jarvis config.
+     */
+    getDepositAmount: async (restaurantId) => {
+        try {
+            console.log('[Settings] Fetching Jarvis config for restaurantId:', restaurantId);
+            const response = await apiClient.get(JARVIS_CONFIG_ENDPOINTS.GET_DETAILS(restaurantId));
+            const data = response.data;
+            console.log('[Settings] Jarvis config response:', data);
+
+            // API returns full restaurant config; deposit lives under settings (same as RestaurantEmail)
+            return data.settings?.depositAmount ?? '';
+        } catch (error) {
+            const message = handleApiError(error, 'Failed to fetch deposit amount');
+            throw new Error(message);
+        }
+    },
+
+    /**
+     * Update deposit amount in Jarvis config.
+     */
+    updateDepositAmount: async (restaurantId, amount) => {
+        try {
+            // request body needs to be exactly this structure
+            const payload = {
+                restaurantId: String(restaurantId),
+                settings: {
+                    depositAmount: Number(amount)
+                }
+            };
+            console.log('[Settings] Updating deposit amount:', payload);
+            const response = await apiClient.post(JARVIS_CONFIG_ENDPOINTS.UPDATE, payload);
+            console.log('[Settings] Deposit amount update response:', response.data);
+            return response.data;
+        } catch (error) {
+            const message = handleApiError(error, 'Failed to update deposit amount');
+            throw new Error(message);
+        }
+    },
+
+    /**
+     * Get restaurant notification email from Jarvis config (settings.RestaurantEmail).
+     * Same source as deposit: GET /api/restaurant/:id/details
+     */
+    getRestaurantEmail: async (restaurantId) => {
+        try {
+            const response = await apiClient.get(JARVIS_CONFIG_ENDPOINTS.GET_DETAILS(restaurantId));
+            const data = response.data;
+            const v = data.settings?.RestaurantEmail;
+            return typeof v === 'string' ? v : '';
+        } catch (error) {
+            const message = handleApiError(error, 'Failed to fetch restaurant email');
+            throw new Error(message);
+        }
+    },
+
+    /**
+     * Update restaurant notification email in Jarvis config.
+     * Same pattern as updateDepositAmount: POST /api/update-config with settings merge.
+     */
+    updateRestaurantEmail: async (restaurantId, email) => {
+        try {
+            const payload = {
+                restaurantId: String(restaurantId),
+                settings: {
+                    RestaurantEmail: String(email ?? '').trim(),
+                },
+            };
+            console.log('[Settings] Updating restaurant email:', payload);
+            const response = await apiClient.post(JARVIS_CONFIG_ENDPOINTS.UPDATE, payload);
+            console.log('[Settings] Restaurant email update response:', response.data);
+            return response.data;
+        } catch (error) {
+            const message = handleApiError(error, 'Failed to update restaurant email');
+            throw new Error(message);
+        }
+    },
+
+    /**
+     * Get Bot Configuration (question flow).
+     * GET /api/restaurant/:restaurantId/details
+     */
+    getBotConfig: async (restaurantId) => {
+        try {
+            const response = await apiClient.get(JARVIS_CONFIG_ENDPOINTS.GET_DETAILS(restaurantId));
+            return response.data;
+        } catch (error) {
+            const message = handleApiError(error, 'Failed to fetch bot configuration');
+            throw new Error(message);
+        }
+    },
+
+    updateBotConfig: async (restaurantId, questionFlow) => {
+        try {
+            const payload = {
+                restaurantId: String(restaurantId),
+                questionFlow: questionFlow,
+            };
+            const response = await apiClient.post(JARVIS_CONFIG_ENDPOINTS.UPDATE, payload);
+            return response.data;
+        } catch (error) {
+            const message = handleApiError(error, 'Failed to update bot configuration');
+            throw new Error(message);
+        }
+    },
+
+    /**
+     * Add a new question to the bot configuration.
+     * POST /api/question/add
+     */
+    addQuestion: async (restaurantId, questionData) => {
+        try {
+            const payload = {
+                restaurantId: String(restaurantId),
+                question: questionData
+            };
+            const response = await apiClient.post(JARVIS_CONFIG_ENDPOINTS.ADD_QUESTION, payload);
+            return response.data;
+        } catch (error) {
+            const message = handleApiError(error, 'Failed to add question');
+            throw new Error(message);
+        }
+    },
+
+    /**
+     * Delete a question from the bot configuration.
+     * DELETE /api/question/delete
+     */
+    deleteQuestion: async (restaurantId, questionId) => {
+        try {
+            const payload = {
+                restaurantId: String(restaurantId),
+                questionId: questionId
+            };
+            const response = await apiClient.delete(JARVIS_CONFIG_ENDPOINTS.DELETE_QUESTION, { data: payload });
+            return response.data;
+        } catch (error) {
+            const message = handleApiError(error, 'Failed to delete question');
+            throw new Error(message);
+        }
+    },
+
+    /**
+     * Get restaurant phone number(s) from Jarvis tenant details.
+     * Phone numbers live on the tenant as phoneNumbers[] (GET /api/restaurant/:id/details).
+     */
+    getPhoneNumber: async (restaurantId) => {
+        try {
+            console.log('[Settings] Fetching phone numbers for restaurantId:', restaurantId);
+            const response = await apiClient.get(JARVIS_CONFIG_ENDPOINTS.GET_DETAILS(restaurantId));
+            const phones = response.data?.phoneNumbers;
+            const list = Array.isArray(phones) ? phones.filter(Boolean) : [];
+            // Single-field UI: show primary (first) number; empty string if none configured
+            return {
+                phoneNumber: list[0] || '',
+                phoneNumbers: list,
+            };
+        } catch (error) {
+            const message = handleApiError(error, 'Failed to fetch phone number');
+            throw new Error(message);
+        }
+    },
+
+    /**
+     * Get PayFast / Bank Details from Jarvis config.
+     * Reads settings.payfastMerchantId, payfastMerchantKey, payfastPassphrase.
+     */
+    getPayfastDetails: async (restaurantId) => {
+        try {
+            const response = await apiClient.get(JARVIS_CONFIG_ENDPOINTS.GET_DETAILS(restaurantId));
+            const s = response.data?.settings || {};
+            return {
+                payfastMerchantId:  s.payfastMerchantId  || '',
+                payfastMerchantKey: s.payfastMerchantKey || '',
+                payfastPassphrase:  s.payfastPassphrase  || '',
+            };
+        } catch (error) {
+            const message = handleApiError(error, 'Failed to fetch PayFast details');
+            throw new Error(message);
+        }
+    },
+
+    /**
+     * Save PayFast / Bank Details to Jarvis config.
+     * Uses same settings-merge pattern as updateDepositAmount.
+     * Split ratio hardcoded: 80% to restaurant, 20% to Booki (configurable later).
+     */
+    updatePayfastDetails: async (restaurantId, details) => {
+        try {
+            const payload = {
+                restaurantId: String(restaurantId),
+                settings: {
+                    payfastMerchantId:      String(details.payfastMerchantId  ?? '').trim(),
+                    payfastMerchantKey:     String(details.payfastMerchantKey ?? '').trim(),
+                    payfastPassphrase:      String(details.payfastPassphrase  ?? '').trim(),
+                    // Split ratio — hardcoded 80/20 for now, will be made configurable later
+                    payfastSplitPercentage: 80,
+                },
+            };
+            console.log('[Settings] Updating PayFast details for restaurant:', restaurantId);
+            const response = await apiClient.post(JARVIS_CONFIG_ENDPOINTS.UPDATE, payload);
+            console.log('[Settings] PayFast update response:', response.data);
+            return response.data;
+        } catch (error) {
+            const message = handleApiError(error, 'Failed to update PayFast details');
+            throw new Error(message);
+        }
+    },
+};
+
+
+
+
+

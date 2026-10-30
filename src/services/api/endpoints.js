@@ -1,0 +1,110 @@
+/**
+ * API Endpoints
+ * Centralized definition of all API endpoints used in this app.
+ * Restaurant-scoped endpoints use factory functions accepting restaurantId.
+ */
+
+// Reservation Endpoints
+export const RESERVATION_ENDPOINTS = {
+    GET_BY_DATE: (restaurantId) => `/restaurants/${restaurantId}/reservations`,
+    GET_BY_ID: (restaurantId, id) => `/restaurants/${restaurantId}/reservations/${id}`,
+    CREATE: (restaurantId) => `/restaurants/${restaurantId}/reservations`,
+    UPDATE: (restaurantId, id) => `/restaurants/${restaurantId}/reservations/${id}`,
+    DELETE: (restaurantId, id) => `/restaurants/${restaurantId}/reservations/${id}`,
+};
+
+// Failed Bookings Endpoints
+export const FAILED_BOOKINGS_ENDPOINTS = {
+    GET_BY_DATE: (restaurantId) => `/restaurants/${restaurantId}/failed-bookings`,
+};
+
+// Other Messages Endpoints
+export const OTHER_MESSAGES_ENDPOINTS = {
+    GET_BY_DATE: (restaurantId) => `/restaurants/${restaurantId}/other-messages`,
+};
+
+// Guest Endpoints
+export const GUEST_ENDPOINTS = {
+    GET_ALL: (restaurantId) => `/restaurants/${restaurantId}/guests`,
+    UPDATE: (restaurantId, id) => `/restaurants/${restaurantId}/guests/${id}`,
+};
+
+// Availability Endpoints
+export const AVAILABILITY_ENDPOINTS = {
+    SET: (restaurantId) => `/restaurants/${restaurantId}/availability`,
+    GET_MONTH: (restaurantId) => `/restaurants/${restaurantId}/availability`,
+};
+
+// Sitting Endpoints (restaurant-defined sittings, e.g. Lunch, Pub Lunch, Christmas Dinner)
+export const SITTING_ENDPOINTS = {
+    LIST: (restaurantId) => `/restaurants/${restaurantId}/sittings`,
+    CREATE: (restaurantId) => `/restaurants/${restaurantId}/sittings`,
+    UPDATE: (restaurantId, sittingId) => `/restaurants/${restaurantId}/sittings/${sittingId}`,
+    DELETE: (restaurantId, sittingId) => `/restaurants/${restaurantId}/sittings/${sittingId}`,
+};
+
+// One-off date sitting schedules (override the weekly schedule for a specific date)
+export const SITTING_SCHEDULE_ENDPOINTS = {
+    LIST: (restaurantId) => `/restaurants/${restaurantId}/sitting-schedules`,
+    UPDATE: (restaurantId) => `/restaurants/${restaurantId}/sitting-schedules`,
+    DELETE: (restaurantId) => `/restaurants/${restaurantId}/sitting-schedules`,
+};
+
+// Weekly Operating Hours Endpoints (per-day sitting slots; legacy breakfast / lunch / dinner keys still returned)
+export const OPERATING_HOURS_ENDPOINTS = {
+    GET: (restaurantId) => `/restaurants/${restaurantId}/operating-hours`,
+    UPDATE: (restaurantId) => `/restaurants/${restaurantId}/operating-hours`,
+};
+
+// Holiday Endpoints
+export const HOLIDAY_ENDPOINTS = {
+    LIST: (restaurantId) => `/restaurants/${restaurantId}/holidays`,
+    CREATE: (restaurantId) => `/restaurants/${restaurantId}/holidays`,
+    DELETE: (restaurantId, holidayId) => `/restaurants/${restaurantId}/holidays/${holidayId}`,
+};
+
+// Address Endpoints
+export const ADDRESS_ENDPOINTS = {
+    GET: (restaurantId) => `/restaurants/${restaurantId}/address`,
+    UPDATE: (restaurantId) => `/restaurants/${restaurantId}/address`,
+};
+
+// Transcription Endpoints
+export const TRANSCRIPTION_ENDPOINTS = {
+    GET_BY_BOOKING_ID: (restaurantId, bookingId) =>
+        `/restaurants/${restaurantId}/transcriptions/${bookingId}`,
+};
+
+// Password Endpoint
+export const AUTH_ENDPOINTS = {
+    UPDATE_PASSWORD: '/settings/password',
+};
+
+// Jarvis Base URL configuration: Automatically switches between localhost for development and live for production
+const JARVIS_BASE_URL = import.meta.env.VITE_JARVIS_BASE_URL || (import.meta.env.MODE === 'development' 
+    ? 'http://localhost:5014' 
+    : 'https://phone.booki.co.za');
+
+// Payment Endpoints
+export const PAYMENT_ENDPOINTS = {
+    GET_BY_RESTAURANT: (restaurantId) => `${JARVIS_BASE_URL}/api/payfast/payments/${restaurantId}`,
+};
+
+// Refund Endpoints
+export const REFUND_ENDPOINTS = {
+    QUERY:    (gatewayTransactionId) => `${JARVIS_BASE_URL}/api/refund/query/${gatewayTransactionId}`,
+    INITIATE: `${JARVIS_BASE_URL}/api/refund/initiate`,
+};
+
+// Jarvis Config Endpoints
+export const JARVIS_CONFIG_ENDPOINTS = {
+    GET_DETAILS: (restaurantId) => `${JARVIS_BASE_URL}/api/restaurant/${restaurantId}/details`,
+    UPDATE: `${JARVIS_BASE_URL}/api/update-config`,
+    ADD_QUESTION: `${JARVIS_BASE_URL}/api/question/add`,
+    DELETE_QUESTION: `${JARVIS_BASE_URL}/api/question/delete`,
+};
+
+// Restaurant Endpoints (Admin)
+export const RESTAURANT_ENDPOINTS = {
+    CREATE: `${JARVIS_BASE_URL}/api/restaurant/create`,
+};
