@@ -1,0 +1,240 @@
+import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { X, MessageSquare, RotateCcw, FileText } from 'lucide-react';
+import { useAuthStore } from '../store/useAuthStore';
+import apiClient from '../services/api/axios';
+import { TRANSCRIPTION_ENDPOINTS } from '../services/api/endpoints';
+import { handleApiError } from '../utils/errorHandler';
+import { formatTime12Hour } from '../utils/dateUtils';
+import BookingSourceBadge from './BookingSourceBadge';
+import { conversationPath } from '../data/omnichannelMock';
+
+/**
+ * ConversationModal
+ * Fetches transcription via /restaurants/:restaurantId/transcriptions/:bookingId
+ * The bookingId comes from reservation.id (e.g. "BK-A0E78660").
+ */
+export default function ConversationModal({ isOpen, onClose, reservation }) {
+    const { restaurantId } = useAuthStore();
+    const [transcription, setTranscription] = useState(null);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState(null);
+
+    // reservation.bookingId holds the booking ID like "BK-A0E78660" (from booking_id in API)
+    const bookingId = reservation?.bookingId;
+    console.log('reservation details :', reservation)
+
+    useEffect(() => {
+        if (!isOpen || reservation?.isSample || !bookingId || !restaurantId) {
+            setTranscription(null);
+            setError(null);
+            setLoading(false);
+            return undefined;
+        }
+
+        let cancelled = false;
+        const loadTranscription = async () => {
+            setLoading(true);
+            setError(null);
+            try {
+                const url = TRANSCRIPTION_ENDPOINTS.GET_BY_BOOKING_ID(restaurantId, bookingId);
+                const response = await apiClient.get(url);
+                if (!cancelled) setTranscription(response.data);
+            } catch (err) {
+                if (!cancelled) setError(handleApiError(err, 'Failed to load transcription'));
+            } finally {
+                if (!cancelled) setLoading(false);
+            }
+        };
+
+        loadTranscription();
+        return () => {
+            cancelled = true;
+        };
+    }, [isOpen, bookingId, restaurantId, reservation?.isSample]);
+
+    if (!isOpen) return null;
+
+    const display = (val) => (val !== null && val !== undefined && val !== '' ? val : 'N/A');
+
+    return (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg border border-border max-w-3xl w-full min-h-[500px] max-h-[90vh] flex flex-col shadow-xl transform transition-all duration-300">
+
+                {/* ── Header ── */}
+                <div className="border-b border-border px-5 py-4">
+                    <div className="flex items-start justify-between mb-3">
+                        <div className="flex-1">
+                            <h3 className="font-heading font-semibold text-foreground text-lg">
+                                Reservation Details
+                            </h3>
+                            <p className="text-xs text-muted-foreground mt-1">
+                                Booking ID: {display(bookingId)} &nbsp;|&nbsp;
+                                Guest: {display(reservation?.bookerName)}
+                            </p>
+                        </div>
+                        <button
+                            onClick={onClose}
+                            className="p-1.5 hover:bg-muted/20 rounded transition-colors"
+                        >
+                            <X className="w-5 h-5 text-foreground" />
+                        </button>
+                    </div>
+
+                    {/* Meta badges */}
+                    {reservation && (
+                        <div className="flex items-center justify-between flex-wrap gap-2">
+                            <div className="flex items-center gap-2 flex-wrap">
+                                <span className={`px-2.5 py-1 text-xs font-medium rounded capitalize
+                                    ${reservation.status === 'Confirmed' ? 'bg-green-100 text-green-700'
+                                        : reservation.status === 'cancelled' ? 'bg-red-100 text-red-700'
+                                            : reservation.status === 'no_show' ? 'bg-orange-100 text-orange-700'
+                                                : 'bg-gray-100 text-gray-600'}`}
+                                >
+                                    {display(reservation.status)}
+                                </span>
+                                {reservation.paymentStatus === 'Refund Completed' ? (
+                                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded bg-teal-50 text-teal-700 border border-teal-200">
+                                        <RotateCcw className="w-3 h-3" />
+                                        Refund Completed
+                                    </span>
+                                ) : reservation.paymentStatus === 'Payment Success' ? (
+                                    <span className="px-2.5 py-1 text-xs font-medium rounded bg-blue-100 text-blue-700">
+                                        Payment Success
+                                    </span>
+                                ) : (
+                                    <span className="px-2.5 py-1 text-xs font-medium rounded bg-orange-100 text-orange-700">
+                                        Payment Pending
+                                    </span>
+                                )}
+                            </div>
+                            <div className="text-right text-xs text-muted-foreground">
+                                <p className="font-medium text-foreground">
+                                    {display(reservation.date)} &nbsp; {display(reservation.time ? formatTime12Hour(reservation.time) : null)}
+                                </p>
+                                <p>Party of {display(reservation.guests)}</p>
+                                <div className="mt-2 flex justify-end items-center gap-2">
+                                    <span>Booking source</span>
+                                    <BookingSourceBadge source={reservation.source} />
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                {/* ── Body ── */}
+                <div className="flex-1 overflow-y-auto relative">
+                    {loading ? (
+                        <div className="absolute inset-0 flex flex-col items-center justify-center min-h-[300px]">
+                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-foreground mb-4" />
+                            <p className="text-sm text-muted-foreground animate-pulse">Loading reservation details...</p>
+                        </div>
+                    ) : error ? (
+                        <div className="flex items-center justify-center h-full min-h-[300px] text-red-500 px-6">
+                            <p className="text-sm">{error}</p>
+                        </div>
+                    ) : (
+                        <div className="p-5 space-y-4 animate-in fade-in duration-300">
+                            {/* Transcription */}
+                            <div className="flex items-center gap-2 mb-3">
+                                <MessageSquare className="w-4 h-4 text-foreground" />
+                                <h4 className="text-sm font-semibold text-foreground">Call Transcription</h4>
+                            </div>
+
+                            <div className="bg-gray-50 border border-border rounded-lg p-4">
+                                {reservation?.isSample && reservation.sampleTranscript ? (
+                                    <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">
+                                        {reservation.sampleTranscript}
+                                    </p>
+                                ) : transcription?.transcription ? (
+                                    <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">
+                                        {transcription.transcription}
+                                    </p>
+                                ) : (
+                                    <p className="text-sm text-muted-foreground">N/A</p>
+                                )}
+                            </div>
+                            {reservation?.conversationId && conversationPath(reservation.conversationId) ? (
+                                <Link
+                                    to={conversationPath(reservation.conversationId)}
+                                    className="inline-flex text-sm font-medium underline"
+                                >
+                                    View conversation
+                                </Link>
+                            ) : null}
+
+                            {/* Notes card */}
+                            {reservation?.notes && (
+                                <div className="bg-white border border-border rounded-lg p-4">
+                                    <p className="text-xs text-muted-foreground mb-1">Notes</p>
+                                    <p className="text-sm font-medium text-foreground">{reservation.notes}</p>
+                                </div>
+                            )}
+
+                            {/* Payment Details */}
+                            <div className="bg-white border border-border rounded-lg p-4 py-4">
+                                <h4 className="text-sm font-semibold text-foreground mb-3">Payment Information</h4>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <p className="text-xs text-muted-foreground mb-1">Amount</p>
+                                        <p className="text-sm font-medium text-foreground">
+                                            {reservation?.paymentAmount ? `${reservation.paymentCurrency || ''} ${reservation.paymentAmount}` : 'N/A'}
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <p className="text-xs text-muted-foreground mb-1">Method</p>
+                                        <p className="text-sm font-medium text-foreground">
+                                            {display(reservation?.paymentMethod)}
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <p className="text-xs text-muted-foreground mb-1">Date & Time</p>
+                                        <p className="text-sm font-medium text-foreground">
+                                            {reservation?.paymentDate 
+                                                ? `${reservation.paymentDate} ${reservation.paymentTime || ''}` 
+                                                : 'N/A'}
+                                        </p>
+                                    </div>
+                                    <div className="overflow-hidden">
+                                        <p className="text-xs text-muted-foreground mb-1">Reference ID</p>
+                                        <p className="text-sm font-medium text-foreground truncate" title={reservation?.paymentId || 'N/A'}>
+                                            {display(reservation?.paymentId)}
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Refund / Payment Notes */}
+                            {reservation?.paymentNotes && (
+                                <div
+                                    className="flex items-start gap-3 rounded-lg px-4 py-3 border"
+                                    style={{
+                                        background: 'linear-gradient(135deg, #f0fdfa 0%, #f7fffe 100%)',
+                                        borderColor: '#14b8a6',
+                                        borderLeft: '4px solid #14b8a6',
+                                    }}
+                                >
+                                    <FileText className="w-4 h-4 text-teal-600 flex-shrink-0 mt-0.5" />
+                                    <div>
+                                        <p className="text-xs font-semibold text-teal-700 uppercase tracking-wide mb-1">Payment Note</p>
+                                        <p className="text-sm text-teal-900 leading-relaxed">{reservation.paymentNotes}</p>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+
+                {/* ── Footer ── */}
+                <div className="border-t border-border p-4">
+                    <button
+                        onClick={onClose}
+                        className="w-full px-4 py-2 bg-foreground text-white rounded-md hover:bg-foreground/90 transition-colors text-sm font-medium"
+                    >
+                        Close
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}

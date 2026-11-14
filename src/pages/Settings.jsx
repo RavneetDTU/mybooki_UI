@@ -1,0 +1,709 @@
+import { CreditCard, Eye, EyeOff, Loader, Lock, Mail, MapPin, Save, ShieldCheck } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { settingsService } from '../services/settings';
+import { useAuthStore } from '../store/useAuthStore';
+
+export function Settings() {
+    const { restaurantId } = useAuthStore();
+    const [addressLoading, setAddressLoading] = useState(true);
+    const [addressSaving, setAddressSaving] = useState(false);
+    const [passwordSaving, setPasswordSaving] = useState(false);
+    const [email, setEmail] = useState('');
+    const [updateEmail, setUpdateEmail] = useState('');
+    const [emailLoading, setEmailLoading] = useState(true);
+    const [emailSaving, setEmailSaving] = useState(false);
+    const [depositAmount, setDepositAmount] = useState('');
+    const [securityDepositEnabled, setSecurityDepositEnabled] = useState(false);
+    const [depositLoading, setDepositLoading] = useState(true);
+    const [depositSaving, setDepositSaving] = useState(false);
+
+    // PayFast / Bank Details State
+    const [payfastLoading, setPayfastLoading] = useState(true);
+    const [payfastSaving, setPayfastSaving] = useState(false);
+    const [showPassphrase, setShowPassphrase] = useState(false);
+    const [payfastDetails, setPayfastDetails] = useState({
+        payfastMerchantId:  '',
+        payfastMerchantKey: '',
+        payfastPassphrase:  '',
+    });
+
+
+    // Restaurant Address State
+    const [address, setAddress] = useState({
+        streetLine1: '',
+        city: '',
+        province: '',
+        postalCode: '',
+    });
+
+    // Password State
+    const [passwordData, setPasswordData] = useState({
+        currentPassword: '',
+        newPassword: '',
+        confirmPassword: '',
+    });
+
+    // Load address from API
+    const loadAddress = useCallback(async () => {
+        if (!restaurantId) return;
+        setAddressLoading(true);
+        try {
+            const data = await settingsService.getAddress(restaurantId);
+            setAddress(data);
+        } catch (error) {
+            console.error('[Settings] Failed to load address:', error);
+        } finally {
+            setAddressLoading(false);
+        }
+    }, [restaurantId]);
+
+    // Load deposit amount from API.
+    // Existing restaurants: depositAmount > 0 → Yes; depositAmount = 0 → No.
+    const loadDepositAmount = useCallback(async () => {
+        if (!restaurantId) return;
+        setDepositLoading(true);
+        try {
+            const amount = await settingsService.getDepositAmount(restaurantId);
+            const numericAmount = Number(amount) || 0;
+            setSecurityDepositEnabled(numericAmount > 0);
+            setDepositAmount(numericAmount > 0 ? amount : '');
+        } catch (error) {
+            console.error('[Settings] Failed to load deposit amount:', error);
+        } finally {
+            setDepositLoading(false);
+        }
+    }, [restaurantId]);
+
+    const loadRestaurantEmail = useCallback(async () => {
+        if (!restaurantId) return;
+        setEmailLoading(true);
+        try {
+            const value = await settingsService.getRestaurantEmail(restaurantId);
+            if (value !== undefined && value !== null) {
+                setEmail(value);
+            }
+        } catch (error) {
+            console.error('[Settings] Failed to load restaurant email:', error);
+        } finally {
+            setEmailLoading(false);
+        }
+    }, [restaurantId]);
+
+    // Load PayFast / Bank Details from Jarvis config
+    const loadPayfastDetails = useCallback(async () => {
+        if (!restaurantId) return;
+        setPayfastLoading(true);
+        try {
+            const data = await settingsService.getPayfastDetails(restaurantId);
+            setPayfastDetails(data);
+        } catch (error) {
+            console.error('[Settings] Failed to load PayFast details:', error);
+        } finally {
+            setPayfastLoading(false);
+        }
+    }, [restaurantId]);
+
+    useEffect(() => {
+        loadAddress();
+        loadDepositAmount();
+        loadRestaurantEmail();
+        loadPayfastDetails();
+    }, [loadAddress, loadDepositAmount, loadRestaurantEmail, loadPayfastDetails]);
+
+    const handleSaveAddress = async () => {
+        setAddressSaving(true);
+        try {
+            await settingsService.updateAddress(restaurantId, address);
+            alert('Address updated successfully!');
+        } catch (error) {
+            console.error('[Settings] Failed to save address:', error);
+            alert('Failed to update address');
+        } finally {
+            setAddressSaving(false);
+        }
+    };
+
+    const handleSaveDepositAmount = async () => {
+        setDepositSaving(true);
+        try {
+            await settingsService.updateDepositAmount(restaurantId, depositAmount);
+            alert('Deposit amount updated successfully!');
+        } catch (error) {
+            console.error('[Settings] Failed to save deposit amount:', error);
+            alert('Failed to update deposit amount');
+        } finally {
+            setDepositSaving(false);
+        }
+    };
+
+    // Yes → show amount editor (existing Save Amount). No → persist depositAmount = 0 immediately
+    // so a previous R5 cannot keep charging after deposits are disabled.
+    const handleSecurityDepositToggle = async (enabled) => {
+        if (enabled) {
+            setSecurityDepositEnabled(true);
+            return;
+        }
+
+        if (!securityDepositEnabled) return;
+
+        setSecurityDepositEnabled(false);
+        setDepositSaving(true);
+        try {
+            await settingsService.updateDepositAmount(restaurantId, 0);
+            setDepositAmount('');
+            alert('Security deposit disabled. Deposit amount set to R0.');
+        } catch (error) {
+            console.error('[Settings] Failed to disable security deposit:', error);
+            // Revert UI if backend write failed so we do not show No with a stale R5 still stored
+            setSecurityDepositEnabled(true);
+            alert('Failed to disable security deposit. Please try again.');
+        } finally {
+            setDepositSaving(false);
+        }
+    };
+
+    const handleSaveEmail = async () => {
+        if (!updateEmail.trim()) {
+            alert('Please enter an email address');
+            return;
+        }
+
+        setEmailSaving(true);
+        try {
+            await settingsService.updateRestaurantEmail(restaurantId, updateEmail);
+            setEmail(updateEmail.trim());
+            setUpdateEmail('');
+            alert('Email updated successfully!');
+        } catch (error) {
+            console.error('[Settings] Failed to save restaurant email:', error);
+            alert('Failed to update email');
+        } finally {
+            setEmailSaving(false);
+        }
+    };
+
+
+    const handleSavePayfastDetails = async () => {
+        if (!payfastDetails.payfastMerchantId.trim()) {
+            alert('Merchant ID is required.');
+            return;
+        }
+        if (!payfastDetails.payfastMerchantKey.trim()) {
+            alert('Merchant Key is required.');
+            return;
+        }
+        setPayfastSaving(true);
+        try {
+            await settingsService.updatePayfastDetails(restaurantId, payfastDetails);
+            alert('Payment details saved successfully!');
+        } catch (error) {
+            console.error('[Settings] Failed to save PayFast details:', error);
+            alert('Failed to save payment details. Please try again.');
+        } finally {
+            setPayfastSaving(false);
+        }
+    };
+
+    const handleChangePassword = async () => {
+        if (passwordData.newPassword !== passwordData.confirmPassword) {
+            alert('Passwords do not match!');
+            return;
+        }
+        if (passwordData.newPassword.length < 8) {
+            alert('Password must be at least 8 characters!');
+            return;
+        }
+        setPasswordSaving(true);
+        try {
+            await settingsService.changePassword(passwordData.currentPassword, passwordData.newPassword);
+            alert('Password changed successfully!');
+            setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' });
+        } catch (error) {
+            alert(error.message || 'Failed to change password');
+        } finally {
+            setPasswordSaving(false);
+        }
+    };
+
+    return (
+        <div className="min-h-screen bg-background">
+            {/* Header */}
+            <div className="border-b border-border bg-white">
+                <div className="max-w-6xl mx-auto px-6 py-4">
+                    <h1 className="font-heading font-semibold text-foreground">
+                        Restaurant Settings
+                    </h1>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                        Manage your restaurant information and account preferences
+                    </p>
+                </div>
+            </div>
+
+            {/* Content */}
+            <div className="max-w-6xl mx-auto px-6 py-5 space-y-5">
+
+                {/* 1. Restaurant Address Section */}
+                <div className="bg-white border border-border rounded-lg overflow-hidden">
+                    <div className="bg-muted/30 border-b border-border px-5 py-3">
+                        <div className="flex items-center gap-2">
+                            <MapPin className="w-4 h-4 text-foreground" />
+                            <h2 className="font-heading font-semibold text-foreground">
+                                Restaurant Address
+                            </h2>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1">
+                            Update your restaurant's physical location
+                        </p>
+                    </div>
+
+                    <div className="p-5">
+                        {addressLoading ? (
+                            <div className="flex items-center justify-center py-8">
+                                <Loader className="w-5 h-5 animate-spin text-muted-foreground" />
+                                <span className="ml-2 text-sm text-muted-foreground">Loading address…</span>
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-1 gap-4">
+                                {/* Street Address */}
+                                <div>
+                                    <label className="block text-xs font-medium text-foreground mb-1.5">
+                                        Street Address
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={address.streetLine1}
+                                        onChange={(e) => setAddress({ ...address, streetLine1: e.target.value })}
+                                        className="w-full px-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-foreground focus:border-foreground transition-all"
+                                        placeholder="123 Main Street"
+                                    />
+                                </div>
+
+                                {/* City, Province, Postal Code */}
+                                <div className="grid grid-cols-3 gap-3">
+                                    <div>
+                                        <label className="block text-xs font-medium text-foreground mb-1.5">City</label>
+                                        <input
+                                            type="text"
+                                            value={address.city}
+                                            onChange={(e) => setAddress({ ...address, city: e.target.value })}
+                                            className="w-full px-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-foreground focus:border-foreground transition-all"
+                                            placeholder="New York"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-medium text-foreground mb-1.5">Province/State</label>
+                                        <input
+                                            type="text"
+                                            value={address.province}
+                                            onChange={(e) => setAddress({ ...address, province: e.target.value })}
+                                            className="w-full px-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-foreground focus:border-foreground transition-all"
+                                            placeholder="NY"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-medium text-foreground mb-1.5">Postal Code</label>
+                                        <input
+                                            type="text"
+                                            value={address.postalCode}
+                                            onChange={(e) => setAddress({ ...address, postalCode: e.target.value })}
+                                            className="w-full px-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-foreground focus:border-foreground transition-all"
+                                            placeholder="10001"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="flex justify-end mt-4 pt-4 border-t border-border">
+                            <button
+                                onClick={handleSaveAddress}
+                                disabled={addressLoading || addressSaving}
+                                className="px-4 py-2 bg-foreground text-white rounded-md hover:bg-foreground/90 transition-colors text-sm font-medium flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                {addressSaving
+                                    ? <><Loader className="w-4 h-4 animate-spin" /> Saving…</>
+                                    : <><Save className="w-4 h-4" /> Save Address</>
+                                }
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                {/* 2. Restaurant Email Section */}
+                <div className="bg-white border border-border rounded-lg overflow-hidden">
+                    <div className="bg-muted/30 border-b border-border px-5 py-3">
+                        <div className="flex items-center gap-2">
+                            <Mail className="w-4 h-4 text-foreground" />
+                            <h2 className="font-heading font-semibold text-foreground">
+                                Restaurant Email
+                            </h2>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1">
+                            Manage your restaurant contact email
+                        </p>
+                    </div>
+
+                    <div className="p-5">
+                        {emailLoading ? (
+                            <div className="flex items-center justify-center py-8">
+                                <Loader className="w-5 h-5 animate-spin text-muted-foreground" />
+                                <span className="ml-2 text-sm text-muted-foreground">Loading email…</span>
+                            </div>
+                        ) : (
+                            <>
+                                <div>
+                                    <label className="block text-xs font-medium text-foreground mb-1.5">
+                                        Email Address
+                                    </label>
+                                    <input
+                                        type="email"
+                                        value={email}
+                                        readOnly
+                                        className="w-full px-3 py-2 border border-border rounded-md text-sm bg-slate-50 text-muted-foreground cursor-not-allowed"
+                                        placeholder="restaurant@example.com"
+                                    />
+                                    <p className="text-xs text-muted-foreground mt-1.5">
+                                        This email will be used for reservation confirmations and customer communications
+                                    </p>
+                                </div>
+
+                                <div className="mt-4">
+                                    <label className="block text-xs font-medium text-foreground mb-1.5">
+                                        Update Email
+                                    </label>
+                                    <input
+                                        type="email"
+                                        value={updateEmail}
+                                        onChange={(e) => setUpdateEmail(e.target.value)}
+                                        disabled={emailSaving}
+                                        className="w-full px-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-foreground focus:border-foreground transition-all"
+                                        placeholder="restaurant@example.com"
+                                    />
+                                    <p className="text-xs text-muted-foreground mt-1.5">
+                                        Enter a new email to replace the current restaurant email.
+                                    </p>
+                                </div>
+                            </>
+                        )}
+
+                        <div className="flex justify-end mt-4 pt-4 border-t border-border">
+                            <button
+                                onClick={handleSaveEmail}
+                                disabled={emailLoading || emailSaving}
+                                className="px-4 py-2 bg-foreground text-white rounded-md hover:bg-foreground/90 transition-colors text-sm font-medium flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                {emailSaving
+                                    ? <><Loader className="w-4 h-4 animate-spin" /> Saving…</>
+                                    : <><Save className="w-4 h-4" /> Save Email</>
+                                }
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                {/* 3. Deposit Amount Section */}
+                <div className="bg-white border border-border rounded-lg overflow-hidden">
+                    <div className="bg-muted/30 border-b border-border px-5 py-3">
+                        <div className="flex items-center gap-2">
+                            {/* <DollarSign className="w-4 h-4 text-foreground" /> */}
+                            <h2 className="font-heading font-semibold text-foreground">
+                                Deposit Amount
+                            </h2>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1">
+                            Set the required deposit amount for reservations
+                        </p>
+                    </div>
+
+                    <div className="p-5">
+                        {depositLoading ? (
+                            <div className="flex items-center justify-center py-8">
+                                <Loader className="w-5 h-5 animate-spin text-muted-foreground" />
+                                <span className="ml-2 text-sm text-muted-foreground">Loading amount…</span>
+                            </div>
+                        ) : (
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="block text-xs font-medium text-foreground mb-2">
+                                        Do you want a security money deposit for booking?
+                                    </label>
+                                    <div className="flex items-center gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => handleSecurityDepositToggle(true)}
+                                            disabled={depositSaving}
+                                            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
+                                                securityDepositEnabled
+                                                    ? 'bg-foreground text-white'
+                                                    : 'border border-border text-muted-foreground hover:bg-muted/20 hover:text-foreground'
+                                            }`}
+                                        >
+                                            Yes
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => handleSecurityDepositToggle(false)}
+                                            disabled={depositSaving}
+                                            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
+                                                !securityDepositEnabled
+                                                    ? 'bg-foreground text-white'
+                                                    : 'border border-border text-muted-foreground hover:bg-muted/20 hover:text-foreground'
+                                            }`}
+                                        >
+                                            No
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {securityDepositEnabled ? (
+                                    <div>
+                                        <label className="block text-xs font-medium text-foreground mb-1.5">
+                                            Amount in Rands
+                                        </label>
+                                        <div className="relative">
+                                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">R</span>
+                                            <input
+                                                type="number"
+                                                value={depositAmount}
+                                                onChange={(e) => setDepositAmount(e.target.value)}
+                                                min="0"
+                                                step="any"
+                                                className="w-full pl-7 pr-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-foreground focus:border-foreground transition-all"
+                                                placeholder="0.00"
+                                            />
+                                        </div>
+
+                                        <div className="mt-4 bg-amber-50 border border-amber-200 rounded-lg p-3">
+                                            <p className="text-xs font-medium text-amber-900 mb-1.5">Important Instructions:</p>
+                                            <ul className="text-xs text-amber-800 space-y-0.5">
+                                                <li>• This exact amount will be required from customers to secure a booking.</li>
+                                                <li>• Changes made here will reflect immediately on your live booking page.</li>
+                                                <li>• Please avoid frequent or unnecessary changes to prevent customer confusion.</li>
+                                            </ul>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="bg-muted/30 border border-border rounded-lg p-3">
+                                        <p className="text-xs text-muted-foreground">
+                                            No security deposit will be collected. Deposit amount is set to R0.
+                                        </p>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {securityDepositEnabled && (
+                            <div className="flex justify-end mt-4 pt-4 border-t border-border">
+                                <button
+                                    onClick={handleSaveDepositAmount}
+                                    disabled={depositLoading || depositSaving}
+                                    className="px-4 py-2 bg-foreground text-white rounded-md hover:bg-foreground/90 transition-colors text-sm font-medium flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    {depositSaving
+                                        ? <><Loader className="w-4 h-4 animate-spin" /> Saving…</>
+                                        : <><Save className="w-4 h-4" /> Save Amount</>
+                                    }
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* 4. Bank Details (PayFast) Section — only when security deposit is enabled */}
+                {securityDepositEnabled && (
+                <div className="bg-white border border-border rounded-lg overflow-hidden">
+                    <div className="bg-muted/30 border-b border-border px-5 py-3">
+                        <div className="flex items-center gap-2">
+                            <CreditCard className="w-4 h-4 text-foreground" />
+                            <h2 className="font-heading font-semibold text-foreground">
+                                Bank Details (PayFast)
+                            </h2>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1">
+                            Connect your PayFast account to receive deposit payments directly
+                        </p>
+                    </div>
+
+                    <div className="p-5">
+                        {payfastLoading ? (
+                            <div className="flex items-center justify-center py-8">
+                                <Loader className="w-5 h-5 animate-spin text-muted-foreground" />
+                                <span className="ml-2 text-sm text-muted-foreground">Loading payment details…</span>
+                            </div>
+                        ) : (
+                            <div className="space-y-4">
+
+                                {/* Split Info Banner */}
+                                <div className="flex items-start gap-3 bg-emerald-50 border border-emerald-200 rounded-lg p-3">
+                                    <ShieldCheck className="w-4 h-4 text-emerald-600 mt-0.5 flex-shrink-0" />
+                                    <div>
+                                        <p className="text-xs font-semibold text-emerald-900">Automatic Split Payment Active</p>
+                                        <p className="text-xs text-emerald-700 mt-0.5">
+                                            <strong>80%</strong> of each deposit goes directly to your PayFast account.
+                                            Booki retains a <strong>20%</strong> platform fee. Funds are split instantly at the time of payment — no manual transfers needed.
+                                        </p>
+                                    </div>
+                                </div>
+
+                                {/* Merchant ID */}
+                                <div>
+                                    <label className="block text-xs font-medium text-foreground mb-1.5">
+                                        Merchant ID <span className="text-red-500">*</span>
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={payfastDetails.payfastMerchantId}
+                                        onChange={(e) => setPayfastDetails({ ...payfastDetails, payfastMerchantId: e.target.value })}
+                                        className="w-full px-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-foreground focus:border-foreground transition-all font-mono"
+                                        placeholder="10000105"
+                                    />
+                                    <p className="text-xs text-muted-foreground mt-1">Found in your PayFast dashboard under Account &gt; Settings</p>
+                                </div>
+
+                                {/* Merchant Key */}
+                                <div>
+                                    <label className="block text-xs font-medium text-foreground mb-1.5">
+                                        Merchant Key <span className="text-red-500">*</span>
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={payfastDetails.payfastMerchantKey}
+                                        onChange={(e) => setPayfastDetails({ ...payfastDetails, payfastMerchantKey: e.target.value })}
+                                        className="w-full px-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-foreground focus:border-foreground transition-all font-mono"
+                                        placeholder="q1cd2rdny4a53"
+                                    />
+                                    <p className="text-xs text-muted-foreground mt-1">Your unique merchant key from the PayFast dashboard</p>
+                                </div>
+
+                                {/* Passphrase */}
+                                <div>
+                                    <label className="block text-xs font-medium text-foreground mb-1.5">
+                                        Passphrase <span className="text-muted-foreground font-normal">(optional)</span>
+                                    </label>
+                                    <div className="relative">
+                                        <input
+                                            type={showPassphrase ? 'text' : 'password'}
+                                            value={payfastDetails.payfastPassphrase}
+                                            onChange={(e) => setPayfastDetails({ ...payfastDetails, payfastPassphrase: e.target.value })}
+                                            className="w-full px-3 py-2 pr-10 border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-foreground focus:border-foreground transition-all font-mono"
+                                            placeholder="Set in PayFast dashboard under Settings"
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowPassphrase(!showPassphrase)}
+                                            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                                        >
+                                            {showPassphrase
+                                                ? <EyeOff className="w-4 h-4" />
+                                                : <Eye className="w-4 h-4" />
+                                            }
+                                        </button>
+                                    </div>
+                                    <p className="text-xs text-muted-foreground mt-1">Leave blank if you haven't set a passphrase in PayFast</p>
+                                </div>
+
+                                {/* Security Notice */}
+                                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                                    <p className="text-xs font-medium text-amber-900 mb-1.5">Security Notice:</p>
+                                    <ul className="text-xs text-amber-800 space-y-0.5">
+                                        <li>• Your Merchant ID must match the PayFast account registered under your restaurant name.</li>
+                                        <li>• Ensure Split Payments are enabled on your PayFast account before saving.</li>
+                                        <li>• These credentials are stored securely and only used to process reservation deposits.</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="flex justify-end mt-4 pt-4 border-t border-border">
+                            <button
+                                onClick={handleSavePayfastDetails}
+                                disabled={payfastLoading || payfastSaving}
+                                className="px-4 py-2 bg-foreground text-white rounded-md hover:bg-foreground/90 transition-colors text-sm font-medium flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                {payfastSaving
+                                    ? <><Loader className="w-4 h-4 animate-spin" /> Saving…</>
+                                    : <><Save className="w-4 h-4" /> Save Payment Details</>
+                                }
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                )}
+
+                {/* 5. Change Password Section */}
+                <div className="bg-white border border-border rounded-lg overflow-hidden">
+                    <div className="bg-muted/30 border-b border-border px-5 py-3">
+                        <div className="flex items-center gap-2">
+                            <Lock className="w-4 h-4 text-foreground" />
+                            <h2 className="font-heading font-semibold text-foreground">
+                                Change Password
+                            </h2>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1">
+                            Update your account password for security
+                        </p>
+                    </div>
+
+                    <div className="p-5">
+                        <div className="space-y-4">
+                            <div>
+                                <label className="block text-xs font-medium text-foreground mb-1.5">Current Password</label>
+                                <input
+                                    type="password"
+                                    value={passwordData.currentPassword}
+                                    onChange={(e) => setPasswordData({ ...passwordData, currentPassword: e.target.value })}
+                                    className="w-full px-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-foreground focus:border-foreground transition-all"
+                                    placeholder="Enter current password"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium text-foreground mb-1.5">New Password</label>
+                                <input
+                                    type="password"
+                                    value={passwordData.newPassword}
+                                    onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })}
+                                    className="w-full px-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-foreground focus:border-foreground transition-all"
+                                    placeholder="Enter new password (min 8 characters)"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium text-foreground mb-1.5">Confirm New Password</label>
+                                <input
+                                    type="password"
+                                    value={passwordData.confirmPassword}
+                                    onChange={(e) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
+                                    className="w-full px-3 py-2 border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-foreground focus:border-foreground transition-all"
+                                    placeholder="Confirm new password"
+                                />
+                            </div>
+
+                            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                                <p className="text-xs font-medium text-blue-900 mb-1.5">Password Requirements:</p>
+                                <ul className="text-xs text-blue-800 space-y-0.5">
+                                    <li>• Minimum 8 characters</li>
+                                    <li>• Mix of uppercase and lowercase letters (recommended)</li>
+                                    <li>• At least one number (recommended)</li>
+                                    <li>• At least one special character (recommended)</li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <div className="flex justify-end mt-4 pt-4 border-t border-border">
+                            <button
+                                onClick={handleChangePassword}
+                                disabled={passwordSaving}
+                                className="px-4 py-2 bg-foreground text-white rounded-md hover:bg-foreground/90 transition-colors text-sm font-medium flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                {passwordSaving
+                                    ? <><Loader className="w-4 h-4 animate-spin" /> Saving…</>
+                                    : <><Lock className="w-4 h-4" /> Change Password</>
+                                }
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    );
+}
