@@ -131,8 +131,10 @@ export const widgetService = {
         return res.data;
     },
 
-    sendChat: async ({ sessionId, visitorKey, text, kickoff, websiteDomain }) => {
-        const res = await phoneClient.post('/api/widget/chat', { sessionId, visitorKey, text, kickoff, websiteDomain });
+    sendChat: async ({ sessionId, visitorKey, text, kickoff, websiteDomain, restaurantId }) => {
+        const body = { sessionId, visitorKey, text, kickoff, websiteDomain };
+        if (restaurantId) body.restaurantId = restaurantId;
+        const res = await phoneClient.post('/api/widget/chat', body);
         return res.data;
     },
 

@@ -11,11 +11,13 @@ function websiteDomain() {
     return window.location.hostname || '';
 }
 
-function readStored() {
-    try { return JSON.parse(window.sessionStorage.getItem(STORAGE_KEY) || ''); } catch { return null; }
+function readStored(key) {
+    try { return JSON.parse(window.sessionStorage.getItem(key) || ''); } catch { return null; }
 }
 
-export default function WebsiteWidgetPreviewModal({ isOpen, onClose }) {
+export default function WebsiteWidgetPreviewModal({ isOpen, onClose, restaurantId = '', embedded = false, siteHost = '' }) {
+    const storageKey = restaurantId ? `booki-widget-embed-${restaurantId}` : STORAGE_KEY;
+    const domain = siteHost || websiteDomain();
     const [openWidget, setOpenWidget] = useState(true);
     const [messages, setMessages] = useState([]);
     const [input, setInput] = useState('');
@@ -25,33 +27,42 @@ export default function WebsiteWidgetPreviewModal({ isOpen, onClose }) {
     const threadRef = useRef(null);
     const sessionRef = useRef({ sessionId: '', visitorKey: '' });
     const callRef = useRef(null);
+    const runRef = useRef(0);
 
     const startChat = async (forceNew = false) => {
+        const run = ++runRef.current;
         setError('');
         setLoading(true);
         try {
             if (!forceNew) {
-                const stored = readStored();
+                const stored = readStored(storageKey);
                 if (stored?.sessionId && stored?.visitorKey) {
-                    const saved = await widgetService.getConversation('', stored.sessionId, { visitorKey: stored.visitorKey, limit: 30 });
-                    if (saved?.messages?.length) {
-                        sessionRef.current = stored;
-                        setMessages(saved.messages);
-                        widgetService.shareLocation(stored).catch(() => {});
-                        return;
+                    try {
+                        const saved = await widgetService.getConversation('', stored.sessionId, { visitorKey: stored.visitorKey, limit: 30 });
+                        if (saved?.messages?.length) {
+                            if (run !== runRef.current) return;
+                            sessionRef.current = stored;
+                            setMessages(saved.messages);
+                            widgetService.shareLocation(stored).catch(() => {});
+                            return;
+                        }
+                    } catch {
+                        // The saved chat is gone. Start a new one.
                     }
                 }
             }
             const session = { sessionId: crypto.randomUUID(), visitorKey: crypto.randomUUID() };
             sessionRef.current = session;
-            window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(session));
-            const result = await widgetService.sendChat({ ...session, kickoff: true, websiteDomain: websiteDomain() });
+            window.sessionStorage.setItem(storageKey, JSON.stringify(session));
+            const result = await widgetService.sendChat({ ...session, kickoff: true, websiteDomain: domain, restaurantId });
+            if (run !== runRef.current) return;
             setMessages([{ id: 'welcome', from: 'assistant', text: result.message.content, kind: 'chat' }]);
             widgetService.shareLocation(session).catch(() => {});
         } catch (err) {
+            if (run !== runRef.current) return;
             setError(err?.response?.data?.error || err.message || 'The assistant could not be reached.');
         } finally {
-            setLoading(false);
+            if (run === runRef.current) setLoading(false);
         }
     };
 
@@ -82,7 +93,8 @@ export default function WebsiteWidgetPreviewModal({ isOpen, onClose }) {
             const result = await widgetService.sendChat({
                 ...sessionRef.current,
                 text,
-                websiteDomain: websiteDomain(),
+                websiteDomain: domain,
+                restaurantId,
             });
             setMessages((current) => [...current, { id: `a-${Date.now()}`, from: 'assistant', text: result.message.content, kind: 'chat' }]);
         } catch (err) {
@@ -103,7 +115,7 @@ export default function WebsiteWidgetPreviewModal({ isOpen, onClose }) {
         try {
             callRef.current = await startWidgetCall({
                 ...sessionRef.current,
-                websiteDomain: websiteDomain(),
+                websiteDomain: domain,
                 onState: setCallState,
                 onLine: (line) => setMessages((current) => [...current, { id: `c-${Date.now()}`, ...line }]),
             });
@@ -115,26 +127,15 @@ export default function WebsiteWidgetPreviewModal({ isOpen, onClose }) {
     };
 
     const callLabel = callState === 'connecting' ? 'Connecting' : callState === 'active' ? 'On a call' : '';
+    const panelClass = embedded
+        ? 'fixed bottom-4 right-4 w-[min(100vw-2rem,360px)] h-[min(100vh-2rem,560px)] z-50 bg-white rounded-2xl shadow-2xl border border-indigo-100 flex flex-col overflow-hidden'
+        : 'absolute bottom-6 right-6 w-[min(100%-2rem,360px)] h-[min(520px,70vh)] bg-white rounded-2xl shadow-2xl border border-indigo-100 flex flex-col overflow-hidden';
+    const bubbleClass = embedded
+        ? 'fixed bottom-4 right-4 z-50 w-14 h-14 rounded-full bg-indigo-600 text-white shadow-xl flex items-center justify-center cursor-pointer'
+        : 'absolute bottom-6 right-6 w-14 h-14 rounded-full bg-indigo-600 text-white shadow-xl flex items-center justify-center cursor-pointer';
 
-    return (
-        <PreviewModal isOpen={isOpen} onClose={onClose} title="Website widget" labelledBy="widget-preview-title" widthClass="max-w-4xl">
-            <div className="flex flex-col h-[min(740px,90vh)] bg-snow">
-                <div className="flex items-center justify-between px-5 py-3 bg-white border-b border-indigo-100 pr-14">
-                    <div>
-                        <p id="widget-preview-title" className="text-sm font-heading font-semibold text-graphite">Restaurant website</p>
-                        <p className="text-[11px] text-graphite/55">Chat or call to book a table</p>
-                    </div>
-                </div>
-                <div className="relative flex-1 overflow-hidden">
-                    <div className="absolute inset-0 bg-gradient-to-br from-indigo-900 via-slate-900 to-emerald-900 text-white p-8">
-                        <p className="font-heading font-semibold tracking-tight">Booki</p>
-                        <div className="max-w-lg mt-16">
-                            <p className="text-[11px] uppercase tracking-[0.2em] text-emerald-200 mb-3">Reservations</p>
-                            <h3 className="font-heading text-3xl sm:text-4xl font-semibold leading-tight">Tell the assistant which restaurant you would like.</h3>
-                        </div>
-                    </div>
-                    {openWidget ? (
-                        <div className="absolute bottom-6 right-6 w-[min(100%-2rem,360px)] h-[min(520px,70vh)] bg-white rounded-2xl shadow-2xl border border-indigo-100 flex flex-col overflow-hidden">
+    const widget = openWidget ? (
+                        <div className={panelClass}>
                             <div className="px-4 py-3 bg-indigo-600 text-white flex items-center gap-3">
                                 <div className="w-9 h-9 rounded-full bg-white/15 flex items-center justify-center"><Sparkles className="w-4 h-4" /></div>
                                 <div className="flex-1 min-w-0">
@@ -169,11 +170,32 @@ export default function WebsiteWidgetPreviewModal({ isOpen, onClose }) {
                                 </button>
                             </form>
                         </div>
-                    ) : (
-                        <button type="button" onClick={() => setOpenWidget(true)} className="absolute bottom-6 right-6 w-14 h-14 rounded-full bg-indigo-600 text-white shadow-xl flex items-center justify-center cursor-pointer" aria-label="Open booking assistant">
-                            <MessageSquare className="w-6 h-6" />
-                        </button>
-                    )}
+    ) : (
+        <button type="button" onClick={() => setOpenWidget(true)} className={bubbleClass} aria-label="Open booking assistant">
+            <MessageSquare className="w-6 h-6" />
+        </button>
+    );
+
+    if (embedded) return widget;
+
+    return (
+        <PreviewModal isOpen={isOpen} onClose={onClose} title="Website widget" labelledBy="widget-preview-title" widthClass="max-w-4xl">
+            <div className="flex flex-col h-[min(740px,90vh)] bg-snow">
+                <div className="flex items-center justify-between px-5 py-3 bg-white border-b border-indigo-100 pr-14">
+                    <div>
+                        <p id="widget-preview-title" className="text-sm font-heading font-semibold text-graphite">Restaurant website</p>
+                        <p className="text-[11px] text-graphite/55">Chat or call to book a table</p>
+                    </div>
+                </div>
+                <div className="relative flex-1 overflow-hidden">
+                    <div className="absolute inset-0 bg-gradient-to-br from-indigo-900 via-slate-900 to-emerald-900 text-white p-8">
+                        <p className="font-heading font-semibold tracking-tight">Booki</p>
+                        <div className="max-w-lg mt-16">
+                            <p className="text-[11px] uppercase tracking-[0.2em] text-emerald-200 mb-3">Reservations</p>
+                            <h3 className="font-heading text-3xl sm:text-4xl font-semibold leading-tight">Tell the assistant which restaurant you would like.</h3>
+                        </div>
+                    </div>
+                    {widget}
                 </div>
             </div>
         </PreviewModal>

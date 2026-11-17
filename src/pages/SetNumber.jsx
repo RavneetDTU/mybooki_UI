@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { bookiopsService, isBookiOpsEnabled } from '../services/bookiops';
 import { phoneVerificationService } from '../services/phoneVerification';
 import { settingsService } from '../services/settings';
+import { WidgetInstall } from '../components/WidgetInstall';
 import { useAuthStore } from '../store/useAuthStore';
 
 export function SetNumber() {
@@ -338,6 +339,7 @@ export function SetNumber() {
                         </div>
                     </div>
                 </div>
+                <WidgetInstall />
             </div>
         </div>
     );
