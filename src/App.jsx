@@ -68,7 +68,7 @@ export default function App() {
                   <Route path="/set-number" element={<SetNumber />} />
                   <Route path="/stats" element={<Stats />} />
                   <Route path="/payments" element={<Payments />} />
-                  <Route path="/marketing" element={<Marketing />} />
+                  <Route path="/marketing/*" element={<Marketing />} />
                   <Route path="/all-calls" element={<FailedBookings />} />
                   <Route path="/other-calls" element={<Navigate to="/all-calls" replace />} />
                   <Route path="/widget" element={<Widget />} />

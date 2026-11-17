@@ -1,4 +1,5 @@
-import { Bot, Calendar, Clock, CreditCard, Globe, LogOut, Mail, Megaphone, MessageCircle, Phone, PhoneCall, Settings, Users } from 'lucide-react';
+import { useState } from 'react';
+import { Bot, Calendar, ChevronDown, Clock, CreditCard, Globe, LogOut, Mail, Megaphone, MessageCircle, Phone, PhoneCall, Settings, Users } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/useAuthStore';
 
@@ -6,6 +7,8 @@ function Sidebar() {
     const location = useLocation();
     const navigate = useNavigate();
     const { logout } = useAuthStore();
+    const marketingOpenDefault = location.pathname.startsWith('/marketing');
+    const [marketingOpen, setMarketingOpen] = useState(marketingOpenDefault);
 
     const handleLogout = () => {
         logout();
@@ -46,7 +49,17 @@ function Sidebar() {
         {
             label: 'Marketing',
             items: [
-                { path: '/marketing', label: 'Marketing', icon: Megaphone },
+                {
+                    path: '/marketing',
+                    label: 'Marketing',
+                    icon: Megaphone,
+                    children: [
+                        { path: '/marketing', label: 'Campaigns', active: (path) => path === '/marketing' || path.startsWith('/marketing/campaigns') },
+                        { path: '/marketing/leads', label: 'Leads' },
+                        { path: '/marketing/conversations', label: 'Conversations' },
+                        { path: '/marketing/templates', label: 'Templates' },
+                    ],
+                },
             ],
         },
     ];
@@ -62,7 +75,7 @@ function Sidebar() {
             </div>
 
             {/* Navigation */}
-            <nav className="flex-1 overflow-y-auto px-3 py-4">
+            <nav className="flex-1 min-h-0 overflow-y-auto px-3 py-4">
                 {navSections.map((section, index) => (
                     <div key={section.label} className={index > 0 ? 'mt-4 border-t border-gray-200 pt-4' : ''}>
                         <p className="px-4 pb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
@@ -72,6 +85,44 @@ function Sidebar() {
                             {section.items.map((item) => {
                                 const Icon = item.icon;
                                 const isActive = location.pathname === item.path;
+                                if (item.children) {
+                                    return (
+                                        <li key={item.label}>
+                                            <button
+                                                type="button"
+                                                onClick={() => setMarketingOpen((open) => !open)}
+                                                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-md transition-colors cursor-pointer ${location.pathname.startsWith('/marketing')
+                                                    ? 'bg-primary text-white'
+                                                    : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                                                    }`}
+                                            >
+                                                <Icon className="w-5 h-5" />
+                                                <span className="text-sm flex-1 text-left">{item.label}</span>
+                                                <ChevronDown className={`w-4 h-4 transition-transform ${marketingOpen ? 'rotate-180' : ''}`} />
+                                            </button>
+                                            {marketingOpen && (
+                                                <ul className="mt-1 ml-4 space-y-1 border-l border-sidebar-border pl-2">
+                                                    {item.children.map((child) => {
+                                                        const childActive = child.active ? child.active(location.pathname) : location.pathname === child.path;
+                                                        return (
+                                                            <li key={child.path}>
+                                                                <Link
+                                                                    to={child.path}
+                                                                    className={`block px-3 py-2 rounded-md text-sm transition-colors ${childActive
+                                                                        ? 'bg-muted text-foreground font-medium'
+                                                                        : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                                                                        }`}
+                                                                >
+                                                                    {child.label}
+                                                                </Link>
+                                                            </li>
+                                                        );
+                                                    })}
+                                                </ul>
+                                            )}
+                                        </li>
+                                    );
+                                }
 
                                 return (
                                     <li key={item.path}>

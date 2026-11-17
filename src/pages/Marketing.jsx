@@ -150,8 +150,10 @@ function previewTemplate(body, mapping) {
         return item.value || `{{${number}}}`;
     });
 }
-import { ArrowLeft, Download, MessageCircle, Settings, Upload } from 'lucide-react';
-import { useSearchParams } from 'react-router-dom';
+import { Download, MessageCircle, Upload } from 'lucide-react';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { CampaignBoard } from '../components/marketing/CampaignBoard';
+import { LeadLogs } from '../components/marketing/LeadLogs';
 import { marketingError, marketingService } from '../services/marketing';
 import { useAuthStore } from '../store/useAuthStore';
 
@@ -160,8 +162,6 @@ const TABS = [
     ['contacts', 'Leads', 'Leads', 'Import a CSV or Excel file, or add someone by hand.'],
     ['inbox', 'Conversations', 'Conversations', 'Every template, assistant reply, and customer message.'],
     ['templates', 'Templates', 'Templates', 'Draft a message, submit it to Meta, and use it once it is approved.'],
-    ['overview', 'Overview', 'Overview', 'Live counts from campaigns, leads, and chats.'],
-    ['settings', 'Settings', 'Settings', 'Quiet hours and the marketing assistant.'],
 ];
 
 function Notice({ error, notice }) {
@@ -192,105 +192,80 @@ function templateDraftIssues(draft) {
 
 export function Marketing() {
     const { restaurantId } = useAuthStore();
-    const [params, setParams] = useSearchParams();
-    const tab = params.get('tab') || 'campaigns';
+    const { pathname } = useLocation();
+    const campaignId = pathname.match(/^\/marketing\/campaigns\/([^/]+)/)?.[1];
+    const section = campaignId ? '' : pathname.split('/')[2] || '';
+    const [params] = useSearchParams();
+    const navigate = useNavigate();
     const [error, setError] = useState('');
     const [notice, setNotice] = useState('');
+    const page = campaignId
+        ? 'campaign'
+        : section === 'leads' ? 'leads'
+            : section === 'conversations' ? 'conversations'
+                : section === 'templates' ? 'templates'
+                    : 'campaigns';
 
-    const open = (next) => {
-        setError('');
-        setNotice('');
-        setParams(next === 'campaigns' ? {} : { tab: next });
-    };
+    useEffect(() => {
+        const tab = params.get('tab');
+        if (tab === 'contacts') navigate('/marketing/leads', { replace: true });
+        else if (tab === 'inbox') navigate('/marketing/conversations', { replace: true });
+        else if (tab === 'templates') navigate('/marketing/templates', { replace: true });
+        else if (tab && tab !== 'campaigns') navigate('/marketing', { replace: true });
+    }, [params, navigate]);
+
+    useEffect(() => {
+        if (!notice) return undefined;
+        const timer = setTimeout(() => setNotice(''), 2500);
+        return () => clearTimeout(timer);
+    }, [notice]);
 
     if (!restaurantId) {
         return <div className="p-8 text-sm text-muted-foreground">Sign in with a restaurant account to use WhatsApp marketing.</div>;
     }
 
-    const current = TABS.find(([id]) => id === tab) || TABS[0];
-    if (tab === 'inbox') {
+    if (page === 'conversations') {
         return (
             <div className="h-screen flex flex-col bg-white">
                 {(error || notice) && <div className="px-4 pt-3"><Notice error={error} notice={notice} /></div>}
                 <div className="flex-1 min-h-0">
-                    <Inbox restaurantId={restaurantId} onBack={() => open('campaigns')} onError={setError} onNotice={setNotice} />
+                    <Inbox restaurantId={restaurantId} initialId={params.get('chat') || ''} onError={setError} onNotice={setNotice} />
                 </div>
             </div>
         );
     }
+    if (page === 'campaigns' || page === 'campaign') {
+        return (
+            <div className="min-h-screen bg-[#f4f6fb]">
+                <div className="px-6 py-5 space-y-4">
+                    <Notice error={error} notice={notice} />
+                    <CampaignBoard restaurantId={restaurantId} campaignId={campaignId} onError={setError} onNotice={setNotice} />
+                </div>
+            </div>
+        );
+    }
+    if (page === 'leads') {
+        return (
+            <div className="min-h-screen bg-[#f4f6fb]">
+                <div className="px-6 py-5 space-y-4">
+                    <Notice error={error} notice={notice} />
+                    <LeadLogs restaurantId={restaurantId} onError={setError} onNotice={setNotice} />
+                </div>
+            </div>
+        );
+    }
+    const current = TABS.find(([id]) => id === 'templates') || TABS[3];
     return (
         <div className="min-h-screen bg-[#f4f6fb]">
-            <div className="border-b border-border bg-white px-6 pt-5">
+            <div className="border-b border-border bg-white px-6 pt-5 pb-4">
                 <p className="text-xs text-muted-foreground">Marketing / {current[1]}</p>
                 <h1 className="font-heading font-semibold text-3xl tracking-tight mt-1">{current[2]}</h1>
                 <p className="text-sm text-muted-foreground mt-1 max-w-2xl">{current[3]}</p>
-                <div className="flex flex-wrap gap-1 mt-4">
-                    {TABS.map(([id, label]) => (
-                        <button key={id} type="button" onClick={() => open(id)} className={`px-3 py-2 text-sm cursor-pointer border-b-2 ${tab === id ? 'border-foreground text-foreground font-medium' : 'border-transparent text-muted-foreground'}`}>
-                            {label}
-                        </button>
-                    ))}
-                </div>
             </div>
             <div className="px-6 py-5 space-y-4">
                 <Notice error={error} notice={notice} />
-                {tab === 'overview' && <Overview restaurantId={restaurantId} onError={setError} />}
-                {tab === 'contacts' && <Contacts restaurantId={restaurantId} onError={setError} onNotice={setNotice} />}
-                {tab === 'campaigns' && <Campaigns restaurantId={restaurantId} onError={setError} onNotice={setNotice} />}
-                {tab === 'templates' && <Templates restaurantId={restaurantId} onError={setError} onNotice={setNotice} />}
-                {tab === 'settings' && <SettingsPanel restaurantId={restaurantId} onError={setError} onNotice={setNotice} />}
+                {page === 'templates' && <Templates restaurantId={restaurantId} onError={setError} onNotice={setNotice} />}
             </div>
-        </div>
-    );
-}
-
-function Overview({ restaurantId, onError }) {
-    const [data, setData] = useState(null);
-    const [loading, setLoading] = useState(true);
-    useEffect(() => {
-        let live = true;
-        setLoading(true);
-        marketingService.overview(restaurantId)
-            .then((rows) => { if (live) setData(rows); })
-            .catch((error) => { if (live) onError(marketingError(error)); })
-            .finally(() => { if (live) setLoading(false); });
-        return () => { live = false; };
-    }, [restaurantId, onError]);
-    if (loading) return <p className="text-sm text-muted-foreground">Loading overview…</p>;
-    if (!data) return <p className="text-sm text-muted-foreground">Overview is not available yet.</p>;
-    const cards = [
-        ['Leads', data.totalContacts],
-        ['Opted in', data.optedInContacts],
-        ['Campaigns', data.totalCampaigns],
-        ['Active', data.activeCampaigns],
-        ['Sent', data.messagesSent],
-        ['Delivered', data.messagesDelivered],
-        ['Failed', data.failedMessages],
-        ['Replies', data.repliesReceived],
-        ['AI chats', data.aiConversations || 0],
-        ['Needs a person', data.needsHuman || 0],
-    ];
-    const empty = data.totalContacts === 0 && data.totalCampaigns === 0;
-    return (
-        <div className="space-y-4">
-            {empty && <p className="text-sm text-muted-foreground">No contacts or campaigns yet. Import opted-in contacts, then submit a template to Meta.</p>}
-            <div className="grid sm:grid-cols-2 xl:grid-cols-5 gap-3">
-                {cards.map(([label, value]) => (
-                    <article key={label} className="rounded-2xl border border-border bg-white px-4 py-4 shadow-sm">
-                        <p className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</p>
-                        <p className="font-heading text-3xl mt-2">{value}</p>
-                    </article>
-                ))}
-            </div>
-            <section className="rounded-2xl border border-border bg-white overflow-hidden">
-                <h2 className="px-4 py-3 font-heading font-semibold text-sm border-b border-border">Recent chats</h2>
-                {(data.recent || []).length === 0 ? <p className="p-4 text-sm text-muted-foreground">No messages yet.</p> : (data.recent || []).map((item) => (
-                    <button key={item.id} type="button" onClick={() => { window.location.assign('/marketing?tab=inbox'); }} className="w-full text-left px-4 py-3 border-b border-border last:border-0 cursor-pointer">
-                        <span className="text-sm font-medium">{item.name || item.phoneDigits}</span>
-                        <span className="block text-xs text-muted-foreground truncate">{item.lastMessage || '—'} · {when(item.updatedAt)}</span>
-                    </button>
-                ))}
-            </section>
         </div>
     );
 }
@@ -471,7 +446,7 @@ function Contacts({ restaurantId, onError, onNotice }) {
                 </div>
                 {loading ? <p className="p-4 text-sm text-muted-foreground">Loading leads…</p> : rows.length === 0 ? <p className="p-8 text-sm text-center text-muted-foreground">No leads yet. Import a file or add someone above.</p> : (
                     <table className="w-full text-sm">
-                        <thead className="text-left text-xs text-muted-foreground bg-muted/40"><tr>{['', 'Name', 'Phone', 'Email', 'Lists'].map((label) => <th key={label || 'pick'} className="px-3 py-2 font-medium">{label}</th>)}</tr></thead>
+                        <thead className="text-left text-xs text-muted-foreground bg-muted/40"><tr>{['', 'Name', 'Phone', 'Email', 'Lists', 'Campaigns'].map((label) => <th key={label || 'pick'} className="px-3 py-2 font-medium">{label}</th>)}</tr></thead>
                         <tbody>
                             {rows.map((contact) => (
                                 <tr key={contact.id} className="border-t border-border">
@@ -480,6 +455,7 @@ function Contacts({ restaurantId, onError, onNotice }) {
                                     <td className="px-3 py-2">{contact.phoneE164}</td>
                                     <td className="px-3 py-2">{contact.email || '—'}</td>
                                     <td className="px-3 py-2">{(contact.tags || []).join(', ') || '—'}</td>
+                                    <td className="px-3 py-2">{(contact.campaigns || []).join(', ') || '—'}</td>
                                 </tr>
                             ))}
                         </tbody>
@@ -926,23 +902,27 @@ function chatLabel(item) {
 }
 
 function messageLabel(message) {
-    if (message.direction === 'inbound') return 'Customer';
-    if (message.kind === 'template') return message.templateName ? `Template · ${message.templateName}` : 'Template';
-    if (message.actor === 'ai') return 'AI';
-    return 'You';
+    if (message.direction === 'inbound') return 'Lead';
+    return 'AI';
 }
 
-function Inbox({ restaurantId, onBack, onError, onNotice }) {
+function messageTime(value) {
+    if (!value) return '';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '';
+    return date.toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+function Inbox({ restaurantId, onError, onNotice, initialId = '' }) {
     const [list, setList] = useState([]);
-    const [currentId, setCurrentId] = useState('');
+    const [currentId, setCurrentId] = useState(initialId);
+    useEffect(() => { if (initialId) setCurrentId(initialId); }, [initialId]);
     const [thread, setThread] = useState(null);
     const [text, setText] = useState('');
     const [query, setQuery] = useState('');
     const [handler, setHandler] = useState('');
     const [campaignId, setCampaignId] = useState('');
     const [campaigns, setCampaigns] = useState([]);
-    const [switching, setSwitching] = useState(false);
-    const [showDetails, setShowDetails] = useState(false);
     const threadEnd = useRef(null);
     const loadList = () => marketingService.conversations(restaurantId, {
         q: query,
@@ -987,16 +967,15 @@ function Inbox({ restaurantId, onBack, onError, onNotice }) {
     useEffect(() => {
         threadEnd.current?.scrollIntoView({ block: 'end' });
     }, [thread?.id, thread?.messages?.length]);
-    const mode = async (next) => {
-        setSwitching(true);
-        try {
-            await marketingService.setMode(restaurantId, currentId, next);
-            onNotice(next === 'ai' ? 'AI will reply to the next customer message.' : 'AI is off. You can type in this chat.');
-            const row = await marketingService.conversation(restaurantId, currentId);
-            setThread(row);
-            loadList();
-        } catch (error) { onError(marketingError(error)); }
-        finally { setSwitching(false); }
+    const mode = (next) => {
+        const previous = thread?.handler;
+        setThread((row) => (row ? { ...row, handler: next } : row));
+        setList((items) => items.map((item) => (item.id === currentId ? { ...item, handler: next } : item)));
+        marketingService.setMode(restaurantId, currentId, next).catch((error) => {
+            setThread((row) => (row ? { ...row, handler: previous } : row));
+            setList((items) => items.map((item) => (item.id === currentId ? { ...item, handler: previous } : item)));
+            onError(marketingError(error));
+        });
     };
     const send = async () => {
         try {
@@ -1009,12 +988,7 @@ function Inbox({ restaurantId, onBack, onError, onNotice }) {
         <div className="flex h-full min-h-0 bg-white">
             <aside className="w-[340px] shrink-0 border-r border-border bg-white overflow-hidden flex flex-col min-h-0">
                 <div className="px-4 pt-4 pb-3 space-y-3 border-b border-border">
-                    <div className="flex items-center gap-2">
-                        <button type="button" aria-label="Back to marketing" onClick={onBack} className="p-1 -ml-1 rounded-md text-foreground cursor-pointer hover:bg-muted">
-                            <ArrowLeft className="h-4 w-4" />
-                        </button>
-                        <h2 className="font-heading font-semibold text-base">WhatsApp Chats</h2>
-                    </div>
+                    <h2 className="font-heading font-semibold text-base">Conversations</h2>
                     <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search name or number" className="w-full px-3 py-2 rounded-lg border text-sm" />
                     <div className="grid grid-cols-2 gap-2">
                         <select value={campaignId} onChange={(event) => setCampaignId(event.target.value)} className="min-w-0 w-full px-2 py-2 rounded-lg border text-sm">
@@ -1032,7 +1006,7 @@ function Inbox({ restaurantId, onBack, onError, onNotice }) {
                 {list.length === 0 ? <p className="p-4 text-sm text-muted-foreground">No chats yet. A chat appears here when a template is sent or someone replies.</p> : list.map((item) => {
                     const label = chatLabel(item);
                     return (
-                    <button key={item.id} type="button" onClick={() => { setCurrentId(item.id); setShowDetails(false); }} className={`w-full text-left px-3 py-3 border-b border-border cursor-pointer ${currentId === item.id ? 'bg-[#f4f6fb]' : ''}`}>
+                    <button key={item.id} type="button" onClick={() => setCurrentId(item.id)} className={`w-full text-left px-3 py-3 border-b border-border cursor-pointer ${currentId === item.id ? 'bg-[#f4f6fb]' : ''}`}>
                         <span className="flex items-start gap-2">
                             <span className="mt-0.5 h-8 w-8 shrink-0 rounded-full bg-slate-200 text-[11px] font-medium flex items-center justify-center">{initials(item.name || item.phoneDigits)}</span>
                             <span className="min-w-0 flex-1">
@@ -1061,23 +1035,9 @@ function Inbox({ restaurantId, onBack, onError, onNotice }) {
                 ) : (
                     <>
                         <div className="px-4 py-3 border-b border-border flex flex-wrap gap-3 items-center">
-                            <div className="mr-auto min-w-0 relative">
-                                <div className="flex items-center gap-1">
-                                    <p className="font-medium text-sm truncate">{thread.name}</p>
-                                    <button type="button" aria-label="Customer details" aria-expanded={showDetails} onClick={() => setShowDetails((open) => !open)} className={`p-1 rounded-md cursor-pointer ${showDetails ? 'bg-muted text-foreground' : 'text-muted-foreground hover:bg-muted'}`}>
-                                        <Settings className="h-3.5 w-3.5" />
-                                    </button>
-                                </div>
-                                <p className="text-xs text-muted-foreground truncate">{thread.windowOpen ? 'Customer replied in the last 24 hours' : 'Waiting for a customer reply'}</p>
-                                {showDetails && (
-                                    <div className="absolute left-0 top-full z-20 mt-2 w-64 rounded-xl border border-border bg-white p-3 text-sm shadow-lg space-y-2">
-                                        <p className="font-medium">{thread.name || 'Guest'}</p>
-                                        <p className="text-xs text-muted-foreground">{thread.contact?.phoneE164 || thread.phoneDigits}</p>
-                                        <p className="text-xs">{thread.handler === 'ai' ? 'AI is replying' : 'You are replying'}</p>
-                                        <p className="text-xs">Opt-in: {thread.contact?.optIn ? 'Yes' : 'No'}</p>
-                                        <p className="text-xs break-all">Campaign: {campaigns.find((item) => item.id === thread.campaignId)?.name || thread.campaignId || '—'}</p>
-                                    </div>
-                                )}
+                            <div className="mr-auto min-w-0">
+                                <p className="font-medium text-sm truncate">{thread.name}</p>
+                                <p className="text-xs text-muted-foreground truncate">{thread.contact?.phoneE164 || thread.phoneDigits || '—'}</p>
                             </div>
                             <span className="text-xs font-medium">{thread.handler === 'ai' ? 'AI on' : 'AI off'}</span>
                             <button
@@ -1085,14 +1045,13 @@ function Inbox({ restaurantId, onBack, onError, onNotice }) {
                                 role="switch"
                                 aria-checked={thread.handler === 'ai'}
                                 aria-label="AI replies"
-                                disabled={switching}
                                 onClick={() => mode(thread.handler === 'ai' ? 'human' : 'ai')}
-                                className={`relative h-7 w-12 shrink-0 rounded-full cursor-pointer disabled:opacity-50 ${thread.handler === 'ai' ? 'bg-emerald-500' : 'bg-slate-300'}`}
+                                className={`relative inline-flex shrink-0 items-center w-10 h-5 rounded-full border-2 border-transparent cursor-pointer transition-colors ${thread.handler === 'ai' ? 'bg-foreground' : 'bg-slate-300'}`}
                             >
-                                <span className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-all ${thread.handler === 'ai' ? 'left-5' : 'left-0.5'}`} />
+                                <span className={`inline-block w-4 h-4 rounded-full bg-white shadow transition-transform ${thread.handler === 'ai' ? 'translate-x-5' : 'translate-x-0'}`} />
                             </button>
                         </div>
-                        <div className="flex-1 overflow-y-auto p-4 space-y-2 bg-[#ece5dd]">
+                        <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3 bg-[#ece5dd]">
                             {thread.nextBefore && (
                                 <button
                                     type="button"
@@ -1111,13 +1070,20 @@ function Inbox({ restaurantId, onBack, onError, onNotice }) {
                                     Earlier messages
                                 </button>
                             )}
-                            {(thread.messages || []).length === 0 ? <p className="text-sm text-muted-foreground">No messages in this chat yet.</p> : (thread.messages || []).map((message) => (
-                                <div key={message.id} className={`max-w-[80%] rounded-lg px-3 py-2 text-sm shadow-sm ${message.direction === 'outbound' ? 'ml-auto bg-[#d9fdd3]' : 'bg-white'}`}>
-                                    <p className="text-[10px] font-medium text-muted-foreground">{messageLabel(message)}</p>
-                                    <p className="whitespace-pre-wrap">{message.body}</p>
-                                    <p className="text-[10px] text-muted-foreground mt-1">{when(message.createdAt)}{message.status ? ` · ${message.status}` : ''}</p>
-                                </div>
-                            ))}
+                            {(thread.messages || []).length === 0 ? <p className="text-sm text-muted-foreground">No messages in this chat yet.</p> : (thread.messages || []).map((message) => {
+                                const outbound = message.direction === 'outbound';
+                                return (
+                                    <div key={message.id} className={`flex w-fit max-w-[75%] flex-col ${outbound ? 'items-end self-end' : 'items-start self-start'}`}>
+                                        <span className="text-[11px] text-slate-500 mb-1 px-1">{messageLabel(message)}</span>
+                                        <div className={`w-fit max-w-full rounded-lg px-2.5 py-1.5 text-sm shadow-sm ${outbound ? 'bg-[#d9fdd3]' : 'bg-white'}`}>
+                                            <p className="whitespace-pre-wrap break-words">
+                                                {message.body}
+                                                <span className="float-right ml-3 mt-1 text-[10px] leading-none text-slate-500 whitespace-nowrap">{messageTime(message.createdAt)}</span>
+                                            </p>
+                                        </div>
+                                    </div>
+                                );
+                            })}
                             <div ref={threadEnd} />
                         </div>
                         <div className="p-3 border-t border-border space-y-2">
@@ -1137,38 +1103,5 @@ function Inbox({ restaurantId, onBack, onError, onNotice }) {
                 )}
             </section>
         </div>
-    );
-}
-
-function SettingsPanel({ restaurantId, onError, onNotice }) {
-    const [form, setForm] = useState(null);
-    useEffect(() => {
-        marketingService.settings(restaurantId).then(setForm).catch((error) => onError(marketingError(error)));
-    }, [restaurantId, onError]);
-    if (!form) return <p className="text-sm text-muted-foreground">Loading settings…</p>;
-    const save = async () => {
-        try {
-            const saved = await marketingService.saveSettings(restaurantId, form);
-            setForm(saved);
-            onNotice('Marketing settings saved.');
-        } catch (error) { onError(marketingError(error)); }
-    };
-    return (
-        <section className="rounded-2xl border border-border bg-white p-4 space-y-3 max-w-2xl">
-            <label className="block text-sm">Menu URL
-                <input value={form.menuUrl || ''} onChange={(event) => setForm({ ...form, menuUrl: event.target.value })} className="mt-1 w-full px-3 py-2 rounded-lg border text-sm" />
-            </label>
-            <label className="block text-sm">Default country code
-                <input value={form.defaultCountryCode || '27'} onChange={(event) => setForm({ ...form, defaultCountryCode: event.target.value })} className="mt-1 w-32 px-3 py-2 rounded-lg border text-sm" />
-            </label>
-            <label className="block text-sm">Offers (one per line: title | details)
-                <textarea value={(form.offers || []).map((item) => `${item.title} | ${item.details}`).join('\n')} onChange={(event) => setForm({ ...form, offers: event.target.value.split('\n').filter(Boolean).map((line) => { const [title, details] = line.split('|'); return { title: (title || '').trim(), details: (details || '').trim() }; }) })} className="mt-1 w-full px-3 py-2 rounded-lg border text-sm" rows={4} />
-            </label>
-            <label className="block text-sm">Events (one per line: title | when | details)
-                <textarea value={(form.events || []).map((item) => `${item.title} | ${item.when || ''} | ${item.details || ''}`).join('\n')} onChange={(event) => setForm({ ...form, events: event.target.value.split('\n').filter(Boolean).map((line) => { const [title, when, details] = line.split('|'); return { title: (title || '').trim(), when: (when || '').trim(), details: (details || '').trim() }; }) })} className="mt-1 w-full px-3 py-2 rounded-lg border text-sm" rows={4} />
-            </label>
-            <p className="text-xs text-muted-foreground">The assistant only mentions offers, events, hours, and the menu saved here or on the restaurant record. Meta credentials stay on the server (`WA_TOKEN`, `WA_WABA_ID`).</p>
-            <button type="button" onClick={save} className="px-3 py-2 rounded-lg bg-foreground text-white text-sm cursor-pointer">Save</button>
-        </section>
     );
 }
