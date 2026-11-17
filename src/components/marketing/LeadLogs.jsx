@@ -106,7 +106,7 @@ export function LeadLogs({ restaurantId, onError, onNotice }) {
                 </div>
                 <div className="flex items-center gap-3">
                     <button type="button" onClick={() => setAdding(true)} className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-200 bg-white text-sm text-slate-700 hover:bg-slate-50 cursor-pointer"><UserPlus className="w-4 h-4" /> Add a lead</button>
-                    <button type="button" onClick={() => navigate('/marketing/conversations')} className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-foreground text-white text-sm cursor-pointer"><MessageSquare className="w-4 h-4" /> Open WhatsApp Inbox →</button>
+                    <button type="button" onClick={() => navigate('/marketing/conversations')} className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-foreground text-white text-sm cursor-pointer"><MessageSquare className="w-4 h-4" /> Open Conversations →</button>
                 </div>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
@@ -188,7 +188,7 @@ export function LeadLogs({ restaurantId, onError, onNotice }) {
                         <input value={draft.email} onChange={(event) => setDraft({ ...draft, email: event.target.value })} placeholder="Email" className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm" />
                         <div className="flex justify-end gap-2">
                             <button type="button" onClick={() => setAdding(false)} className="px-3 py-2 rounded-lg border text-sm cursor-pointer">Cancel</button>
-                            <button className="px-3 py-2 rounded-lg bg-indigo-600 text-white text-sm cursor-pointer">Save lead</button>
+                            <button className="px-3 py-2 rounded-lg bg-foreground text-white text-sm cursor-pointer">Save lead</button>
                         </div>
                     </form>
                 </div>
