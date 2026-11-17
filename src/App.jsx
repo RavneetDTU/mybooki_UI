@@ -22,6 +22,7 @@ import { Conversations } from './pages/Conversations';
 import { WhatsAppInbox } from './pages/WhatsAppInbox';
 import { WidgetInbox } from './pages/WidgetInbox';
 import { SetNumber } from './pages/SetNumber';
+import { WidgetEmbed } from './pages/WidgetEmbed';
 import { Settings } from './pages/Settings';
 import { Stats } from './pages/Stats';
 import { Widget } from './pages/Widget';
@@ -45,6 +46,7 @@ export default function App() {
         <Route path="/privacy-policy" element={<PrivacyPolicy />} />
         <Route path="/terms-of-service" element={<TermsAndConditions />} />
         <Route path="/admin/onboard" element={<OnboardRestaurant />} />
+        <Route path="/widget-embed" element={<WidgetEmbed />} />
 
         {/* --- Main App Layout (Sidebar + Content) --- */}
         {/* This catches all other paths (*) and renders the Sidebar layout */}
