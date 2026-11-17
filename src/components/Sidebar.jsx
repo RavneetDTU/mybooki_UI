@@ -1,4 +1,4 @@
-import { Bot, Calendar, Clock, CreditCard, FileText, Globe, LogOut, Mail, Megaphone, MessageCircle, MessageSquare, Phone, PhoneCall, Settings, UserPlus, Users } from 'lucide-react';
+import { BookOpen, Bot, Calendar, Clock, CreditCard, FileText, Globe, LogOut, Mail, Megaphone, MessageCircle, MessageSquare, PhoneCall, Settings, UserPlus, Users } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/useAuthStore';
 
@@ -31,7 +31,7 @@ function Sidebar() {
                 // { path: '/widget', label: 'Widget', icon: Code2 },
                 // { path: '/widget-conversations', label: 'Widget Chats', icon: MessageCircle },
                 { path: '/payments', label: 'Payments', icon: CreditCard },
-                { path: '/set-number', label: 'Restaurant Number', icon: Phone },
+                { path: '/set-number', label: 'Setup Guide', icon: BookOpen },
             ],
         },
         {
